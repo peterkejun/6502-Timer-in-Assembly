@@ -1,0 +1,265 @@
+PortB:  .SET $8000
+PortA:  .SET $8001
+DDR_B:  .SET $8002
+DDR_A:  .SET $8003
+
+IER:  .SET $800E
+ACR:  .set $800B
+
+VIA_TCL:  .SET $8004
+VIA_TCH:  .SET $8005
+VIA_TLL:  .SET $8006
+VIA_TLH:  .SET $8007
+VIA_TMR_COUNT:  .set $219
+
+Pattern0:  .SET $200
+Pattern1:  .SET $201
+Pattern2:  .SET $202
+Pattern3:  .SET $203
+Pattern4:  .SET $204
+Pattern5:  .SET $205
+Pattern6:  .SET $206
+Pattern7:  .SET $207
+Pattern8:  .SET $208
+Pattern9:  .SET $209
+
+StoreA:  .SET $210
+StoreX:  .SET $211
+StoreY:  .SET $212
+
+TimerCount:  .SET $213
+TimerOn:  .SET $214
+
+MinuteTens:  .SET $215
+MinuteOnes:  .SET $216
+SecondTens:  .SET $217
+SecondOnes:  .SET $218
+
+  .ORG $E000
+  
+TimerSetup: 
+  LDA #$00
+  STA MinuteTens
+  STA MinuteOnes
+  STA SecondTens
+  STA SecondOnes
+  
+  LDA #$00
+  STA TimerCount
+  LDA #$00
+  STA TimerOn
+  
+SSD_PatternSetup:
+  JSR LoadPattern
+  
+VIA_Setup:
+  LDA #$FF
+  STA DDR_A
+  STA DDR_
+  
+VIA_TimerSetup:
+  LDA #$4E
+  STA VIA_TCL
+  LDA #$C3
+  STA VIA_TCH
+  LDA ACR
+  AND #$7F
+  ORA #$40
+  STA ACR
+  LDA #$C0
+  STA IER
+  CLI
+  
+main:
+  JSR Select1
+  JSR mpDelay
+  LDY MinuteTens
+  LDA $200,Y
+  EOR #$FF
+  STA PortA
+  
+  JSR Select2
+  JSR mpDelay
+  LDY MinuteOnes
+  LDA $200,Y
+  EOR #$FF
+  STA PortA
+  
+  JSR Select3
+  JSR mpDelay
+  LDY SecondTens
+  LDA $200,Y
+  EOR #$FF
+  STA PortA
+  
+  JSR Select4
+  JSR mpDelay
+  LDY SecondOnes
+  LDA $200,Y
+  EOR #$FF
+  STA PortA
+  
+  JMP main
+  
+mpDelay:
+  LDA #$00
+  LDX #$06
+mpDelayB:
+  LDY #$FF
+mpDelayA:
+  DEY
+  BNE mpDelayA
+  DEX
+  BNE mpDelayB
+  RTS
+  
+  
+debounceDelay:		;delay routine
+  LDA #$00	
+  LDX #$C4
+loopB:
+  LDY #$ff
+loopA:
+  DEY  
+  BNE loopA
+  DEX
+  BNE loopB
+  RTS
+  
+Select1:
+  LDA #$EF	;11101111
+  STA PortB
+  RTS
+  
+Select2:
+  LDA #$FD	;11111101
+  STA PortB
+  RTS
+  
+Select3:
+  LDA #$FB	;11111011
+  STA PortB
+  RTS
+  
+Select4:
+  LDA #$F7	;11110111
+  STA PortB
+  RTS
+  
+LoadPattern:
+  LDA #$7D
+  STA Pattern0
+  LDA #$30
+  STA Pattern1
+  LDA #$6E
+  STA Pattern2
+  LDA #$7A
+  STA Pattern3
+  LDA #$33
+  STA Pattern4
+  LDA #$5B
+  STA Pattern5
+  LDA #$5F
+  STA Pattern6
+  LDA #$79
+  STA Pattern7
+  LDA #$7F
+  STA Pattern8
+  LDA #$7B
+  STA Pattern9
+  RTS
+  
+  
+  .ORG $F000
+TimerISR:
+  STA StoreA
+  STX StoreX
+  STY StoreY
+  
+  LDA TimerOn
+  CMP #$01
+  BNE TimerCleanUp
+ 
+CountUpTo30:
+  INC TimerCount
+  LDA TimerCount
+  CMP #$1E
+  BNE TimerCleanUp
+  LDA #$00
+  STA TimerCount
+  
+increaseTimer:
+  LDA SecondOnes
+  CMP #$09
+  BEQ SecondOnesCarry
+  INC SecondOnes
+  JMP TimerCleanUp
+  
+SecondOnesCarry:
+  LDA #$00
+  STA SecondOnes
+  LDA SecondTens
+  CMP #$05
+  BEQ SecondTensCarry
+  INC SecondTens
+  JMP TimerCleanUp
+
+SecondTensCarry:
+  LDA #$00
+  STA SecondTens
+  LDA MinuteOnes
+  CMP #$09
+  BEQ MinuteOnesCarry
+  INC MinuteOnes
+  JMP TimerCleanUp
+  
+MinuteOnesCarry:
+  LDA #$00
+  STA MinuteOnes
+  LDA MinuteTens
+  CMP #$05
+  BEQ MinuteTensCarry
+  INC MinuteTens
+  JMP TimerCleanUp
+  
+MinuteTensCarry:
+  LDA #$00
+  STA TimerOn
+  
+TimerCleanUp:
+  LDA #$FF
+  STA VIA_TLL
+  STA VIA_TLH
+  
+  LDA StoreX
+  TAX
+  LDA StoreY
+  TAY
+  LDA StoreA
+  RTI
+  
+  
+  .ORG $F500
+IO_ISR:
+  STA StoreA
+  STX StoreX
+  STY StoreY
+  
+  LDA TimerOn
+  EOR #$01
+  STA TimerOn
+  
+IO_ISR_CleanUp:
+
+  JSR debounceDelay
+
+  LDA StoreX
+  TAX
+  LDA StoreY
+  TAY
+  LDA StoreA
+  RTI
+  
+  
+  .END
+  
